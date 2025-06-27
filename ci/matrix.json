@@ -1,0 +1,13 @@
+[
+  {
+    "name": "git-ansible",
+    "build": {
+      "base": "docker.io/alpine:3.22.0",
+      "context": "./docker/git-ansible",
+      "dockerfile": "./docker/git-ansible/Dockerfile",
+      "target": "build",
+      "tag": "1.0.0",
+      "latest": true
+    }
+  }
+]
