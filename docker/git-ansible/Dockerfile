@@ -10,6 +10,7 @@ RUN addgroup -g 1000 user && \
     apk update && \
     apk add --no-cache \
         git \                                                                              
+        yq \                                                                              
         py3-pip && \
     find /usr/lib -name EXTERNALLY-MANAGED -exec rm -f {} \;
          
