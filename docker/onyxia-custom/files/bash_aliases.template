@@ -1,0 +1,10 @@
+alias ll='ls -lrta'
+alias la='ls -A'
+alias l='ls -la'
+alias gs='git status'
+alias venv="source $HOME/venv/bin/activate"
+alias wk='/usr/bin/watch -n10 kubectl'
+alias k=kubectl
+complete -o default -F __start_kubectl k
+source <(kubectl completion bash)
+alias t=terraform

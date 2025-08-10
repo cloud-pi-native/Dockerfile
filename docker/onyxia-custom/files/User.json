@@ -1,0 +1,26 @@
+{
+  "security.workspace.trust.enabled": false,
+  "security.workspace.trust.startupPrompt": "never",
+  "terminal.integrated.inheritEnv": false,
+  "python.testing.pytestEnabled": true,
+  "flake8.args": [
+    "--max-line-length=100"
+  ],
+  "redhat.telemetry.enabled": false,
+  "julia.symbolCacheDownload": true,
+  "julia.enableTelemetry": false,
+  "r.bracketedPaste": true,
+  "cSpell.language": "en,fr",
+  "cSpell.enableFiletypes": [
+    "!jupyter",
+    "!python",
+    "!r",
+    "!json",
+    "!yaml"
+  ],
+  "[latex]": {
+    "editor.wordWrap": "on"
+  },
+  "workbench.colorTheme": "Default Dark Modern",
+  "terminal.integrated.copyOnSelection": true
+}

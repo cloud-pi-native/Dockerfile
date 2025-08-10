@@ -9,5 +9,16 @@
       "tag": "1.0.0",
       "latest": true
     }
+  },
+  {
+    "name": "onyxia-custom",
+    "build": {
+      "base": "debian:trixie-slim",
+      "context": "./docker/onyxia-custom",
+      "dockerfile": "./docker//onyxia-custom/Dockerfile",
+      "target": "build",
+      "tag": "1.0.0",
+      "latest": true
+    }
   }
 ]

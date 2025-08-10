@@ -1,0 +1,8 @@
+silent! source $VIMRUNTIME/defaults.vim
+set mouse-=a
+set cursorline
+set cursorcolumn
+set expandtab
+set history=100
+set tabstop=4
+syntax on
