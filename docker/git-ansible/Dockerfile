@@ -10,7 +10,7 @@ RUN apk update && \
     find /usr/lib -name EXTERNALLY-MANAGED -exec rm -f {} \;
 
 RUN pip3 install --upgrade pip && \
-    pip3 install --no-cache-dir ansible pyyaml kubernetes python-gitlab jmespath hvac
+    pip3 install --no-cache-dir ansible pyyaml kubernetes python-gitlab jmespath hvac botocore boto3
 
 RUN ansible-galaxy collection install community.general kubernetes.core
 
