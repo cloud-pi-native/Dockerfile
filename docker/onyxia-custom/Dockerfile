@@ -188,6 +188,16 @@ USER 1000
 # Install Ansible collections
 RUN ansible-galaxy collection install community.general kubernetes.core ansible.utils
 
+# Install Node.js v22 and pnpm v10 with Volta
+RUN curl https://get.volta.sh | bash && \
+    export VOLTA_HOME="$HOME/.volta" && \
+    export PATH="$VOLTA_HOME/bin:$PATH" && \
+    volta install node@22 && \
+    volta install pnpm@10
+
+ENV VOLTA_HOME="/home/${USERNAME}/.volta"
+ENV PATH="${VOLTA_HOME}/bin:${PATH}"
+
 # Remove build tools to shrink image
 RUN sudo apt purge -y build-essential python3-dev libyaml-dev && \
     sudo apt autoremove -y && sudo apt clean && \
