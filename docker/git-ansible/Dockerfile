@@ -4,8 +4,9 @@ FROM ${BASE_IMAGE} AS build
 
 RUN apk update && \
     apk add --no-cache \
-        git \                                                                              
-        yq \                                                                              
+        git \
+        yq \
+        s3cmd \
         py3-pip && \
     find /usr/lib -name EXTERNALLY-MANAGED -exec rm -f {} \;
 
