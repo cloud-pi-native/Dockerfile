@@ -11,6 +11,17 @@
     }
   },
   {
+    "name": "git-sync",
+    "build": {
+      "base": "docker.io/debian:trixie-slim",
+      "context": "./docker/git-sync",
+      "dockerfile": "./docker/git-sync/Dockerfile",
+      "target": "build",
+      "tag": "1.0.0",
+      "latest": true
+    }
+  },
+  {
     "name": "onyxia-custom",
     "build": {
       "base": "debian:trixie-slim",
