@@ -3,7 +3,7 @@ FROM docker.io/node:22-bullseye-slim as builder
 
 WORKDIR /workspace
 RUN apt-get update && apt-get install --no-install-recommends -y git ca-certificates && \
-    git clone --depth 1 --branch develop https://github.com/cloud-pi-native/console.git && \
+    git clone --depth 1 --branch v9.11.3 https://github.com/cloud-pi-native/console.git && \
     cd console && \
     corepack enable && corepack prepare pnpm@10.5.2 --activate && \
     pnpm install --filter @cpn-console/playwright --frozen-lockfile
