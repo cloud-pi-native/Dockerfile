@@ -3,7 +3,7 @@ FROM docker.io/node:22-bullseye-slim as builder
 
 WORKDIR /workspace
 RUN apt-get update && apt-get install --no-install-recommends -y git ca-certificates && \
-    git clone --depth 1 --branch v9.11.3 https://github.com/cloud-pi-native/console.git && \
+    git clone --depth 1 --branch v9.11.5 https://github.com/cloud-pi-native/console.git && \
     cd console && \
     corepack enable && corepack prepare pnpm@10.5.2 --activate && \
     pnpm install --filter @cpn-console/playwright --frozen-lockfile
@@ -28,7 +28,7 @@ RUN apt-get update && \
        bash \
        curl && \
     corepack enable && corepack prepare pnpm@10.5.2 --activate && \
-    cd playwright && pnpm exec playwright install --with-deps && \
+    cd playwright && pnpm exec playwright install firefox --with-deps && \
     chown -R 1000:0 /workspace && \
     chmod -R g=u /workspace && \
     rm -rf /root/.cache /tmp/* /var/lib/apt/lists/*

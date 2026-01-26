@@ -39,7 +39,7 @@
       "context": "./docker/playwright",
       "dockerfile": "./docker/playwright/Dockerfile",
       "target": "build",
-      "tag": "1.1.0",
+      "tag": "1.2.0",
       "latest": true
     }
   }
