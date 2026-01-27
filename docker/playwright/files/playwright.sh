@@ -3,18 +3,16 @@ set -euo pipefail
 
 # --- RUN TESTS ---------------------------------------------------
 echo "🔹 Running Playwright integration tests..."
-unset KEYCLOAK_PORT
 
 # Run tests and capture exit code (0 = success, non-zero = failure)
-PLAYWRIGHT_HTML_OPEN=never pnpm run playwright:test --grep @integ ${PLAYWRIGHT_TEST} --reporter=html
-TEST_EXIT_CODE=$?
+PLAYWRIGHT_HTML_OPEN=never pnpm run playwright:test --grep @integ ${PLAYWRIGHT_TEST} --reporter=html || TEST_EXIT_CODE=$?
 
 # --- CHECK RESULTS -----------------------------------------------
 if [ "$TEST_EXIT_CODE" -ne 0 ]; then
   echo "❌ Some Playwright tests failed. Uploading HTML report to Mattermost..."
 
   # Ensure report exists
-  if [ ! -f "playwright-report/index.html" ]; then
+  if [ ! -f "playwright/playwright-report/index.html" ]; then
     echo "⚠️ Report file not found at playwright/playwright-report/index.html"
     exit 1
   fi
