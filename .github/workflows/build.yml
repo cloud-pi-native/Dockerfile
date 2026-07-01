@@ -69,38 +69,56 @@ jobs:
     - name: Get image status
       id: image-status
       run: |
+        MANIFEST_URL="https://${{ inputs.REGISTRY }}/v2/${{ inputs.NAMESPACE }}/${{ matrix.images.name }}/manifests/${{ matrix.images.build.tag }}"
+        AUTH_HEADER="Authorization: Bearer $(echo -n '${{ secrets.GITHUB_TOKEN }}' | base64 -w 0)"
+        echo "::group::debug context"
+        echo "URL=$MANIFEST_URL"
+        echo "TOKEN_LEN=$(echo -n '${{ secrets.GITHUB_TOKEN }}' | wc -c)"
+        curl --version | head -1
+        echo "::endgroup::"
+
+        set +e
         IMAGE_STATUS=$(curl \
           --head \
           --silent \
           --write-out '%{http_code}' \
           --output /dev/null \
-          -H "Authorization: Bearer $(echo -n '${{ secrets.GITHUB_TOKEN }}' | base64)" \
-          https://${{ inputs.REGISTRY }}/v2/${{ inputs.NAMESPACE }}/${{ matrix.images.name }}/manifests/${{ matrix.images.build.tag }})
+          -H "$AUTH_HEADER" \
+          "$MANIFEST_URL")
+        CURL_EXIT=$?
+        set -e
+        echo "HEAD curl_exit=$CURL_EXIT http_status=$IMAGE_STATUS"
+        if [ "$CURL_EXIT" -ne 0 ]; then
+          echo "::error::curl HEAD failed (exit $CURL_EXIT) on $MANIFEST_URL"
+          exit "$CURL_EXIT"
+        fi
 
         if [ ! "$IMAGE_STATUS" == "404" ]; then
+          set +e
+          MANIFEST_BODY=$(curl --silent -H "$AUTH_HEADER" "$MANIFEST_URL")
+          CURL_EXIT=$?
+          set -e
+          echo "GET curl_exit=$CURL_EXIT"
+          echo "::group::manifest body"
+          echo "$MANIFEST_BODY"
+          echo "::endgroup::"
+          if [ "$CURL_EXIT" -ne 0 ]; then
+            echo "::error::curl GET failed (exit $CURL_EXIT) on $MANIFEST_URL"
+            exit "$CURL_EXIT"
+          fi
+
           if [ "${{ inputs.BUILD_AMD64 }}" == "true" ] && [ "${{ inputs.BUILD_ARM64 }}" == "true" ]; then
-            NEEDS_BUILD=$(curl \
-              --silent \
-              -H "Authorization: Bearer $(echo -n '${{ secrets.GITHUB_TOKEN }}' | base64)" \
-              https://${{ inputs.REGISTRY }}/v2/${{ inputs.NAMESPACE }}/${{ matrix.images.name }}/manifests/${{ matrix.images.build.tag }} \
-              | jq '[.manifests[] | select(.platform.architecture == "amd64" or .platform.architecture == "arm64")] | length < 2')
+            NEEDS_BUILD=$(echo "$MANIFEST_BODY" | jq '[.manifests[] | select(.platform.architecture == "amd64" or .platform.architecture == "arm64")] | length < 2')
           elif [ "${{ inputs.BUILD_ARM64 }}" == "true" ]; then
-            NEEDS_BUILD=$(curl \
-              --silent \
-              -H "Authorization: Bearer $(echo -n '${{ secrets.GITHUB_TOKEN }}' | base64)" \
-              https://${{ inputs.REGISTRY }}/v2/${{ inputs.NAMESPACE }}/${{ matrix.images.name }}/manifests/${{ matrix.images.build.tag }} \
-              | jq '[.manifests[] | select(.platform.architecture == "arm64")] | length < 1')
+            NEEDS_BUILD=$(echo "$MANIFEST_BODY" | jq '[.manifests[] | select(.platform.architecture == "arm64")] | length < 1')
           else
-            NEEDS_BUILD=$(curl \
-              --silent \
-              -H "Authorization: Bearer $(echo -n '${{ secrets.GITHUB_TOKEN }}' | base64)" \
-              https://${{ inputs.REGISTRY }}/v2/${{ inputs.NAMESPACE }}/${{ matrix.images.name }}/manifests/${{ matrix.images.build.tag }} \
-              | jq '[.manifests[] | select(.platform.architecture == "amd64")] | length < 1')
+            NEEDS_BUILD=$(echo "$MANIFEST_BODY" | jq '[.manifests[] | select(.platform.architecture == "amd64")] | length < 1')
           fi
         else
           NEEDS_BUILD="true"
         fi
 
+        echo "NEEDS_BUILD=$NEEDS_BUILD"
         echo "NEEDS_BUILD=$NEEDS_BUILD" >> $GITHUB_OUTPUT
 
     - name: Checks-out repository
@@ -171,26 +189,26 @@ jobs:
           --silent \
           --write-out '%{http_code}' \
           --output /dev/null \
-          -H "Authorization: Bearer $(echo -n '${{ secrets.GITHUB_TOKEN }}' | base64)" \
+          -H "Authorization: Bearer $(echo -n '${{ secrets.GITHUB_TOKEN }}' | base64 -w 0)" \
           https://${{ inputs.REGISTRY }}/v2/${{ inputs.NAMESPACE }}/${{ matrix.images.name }}/manifests/${{ matrix.images.build.tag }})
 
         if [ ! "$IMAGE_STATUS" == "404" ]; then
           if [ "${{ inputs.BUILD_AMD64 }}" == "true" ] && [ "${{ inputs.BUILD_ARM64 }}" == "true" ]; then
             NEEDS_BUILD=$(curl \
               --silent \
-              -H "Authorization: Bearer $(echo -n '${{ secrets.GITHUB_TOKEN }}' | base64)" \
+              -H "Authorization: Bearer $(echo -n '${{ secrets.GITHUB_TOKEN }}' | base64 -w 0)" \
               https://${{ inputs.REGISTRY }}/v2/${{ inputs.NAMESPACE }}/${{ matrix.images.name }}/manifests/${{ matrix.images.build.tag }} \
               | jq '[.manifests[] | select(.platform.architecture == "amd64" or .platform.architecture == "arm64")] | length < 2')
           elif [ "${{ inputs.BUILD_ARM64 }}" == "true" ]; then
             NEEDS_BUILD=$(curl \
               --silent \
-              -H "Authorization: Bearer $(echo -n '${{ secrets.GITHUB_TOKEN }}' | base64)" \
+              -H "Authorization: Bearer $(echo -n '${{ secrets.GITHUB_TOKEN }}' | base64 -w 0)" \
               https://${{ inputs.REGISTRY }}/v2/${{ inputs.NAMESPACE }}/${{ matrix.images.name }}/manifests/${{ matrix.images.build.tag }} \
               | jq '[.manifests[] | select(.platform.architecture == "arm64")] | length < 1')
           else
             NEEDS_BUILD=$(curl \
               --silent \
-              -H "Authorization: Bearer $(echo -n '${{ secrets.GITHUB_TOKEN }}' | base64)" \
+              -H "Authorization: Bearer $(echo -n '${{ secrets.GITHUB_TOKEN }}' | base64 -w 0)" \
               https://${{ inputs.REGISTRY }}/v2/${{ inputs.NAMESPACE }}/${{ matrix.images.name }}/manifests/${{ matrix.images.build.tag }} \
               | jq '[.manifests[] | select(.platform.architecture == "amd64")] | length < 1')
           fi
