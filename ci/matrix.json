@@ -1,5 +1,16 @@
 [
   {
+    "name": "actions-runner-pw",
+    "build": {
+      "base": "ghcr.io/actions/actions-runner:latest",
+      "context": "./docker/actions-runner-pw",
+      "dockerfile": "./docker/actions-runner-pw/Dockerfile",
+      "target": "build",
+      "tag": "24-1.59.1-2",
+      "latest": true
+    }
+  },
+  {
     "name": "backup-tools",
     "build": {
       "base": "docker.io/alpine:3.22.1",
