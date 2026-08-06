@@ -6,7 +6,7 @@
       "context": "./docker/actions-runner-pw",
       "dockerfile": "./docker/actions-runner-pw/Dockerfile",
       "target": "build",
-      "tag": "24-1.59.1-2",
+      "tag": "26-1.59.1-3",
       "latest": true
     }
   },
