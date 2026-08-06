@@ -3,7 +3,7 @@ ARG BASE_IMAGE=ghcr.io/actions/actions-runner:latest
 FROM ${BASE_IMAGE} AS build
 
 ARG COMPOSE_VERSION=v2.40.0
-ARG NODE_MAJOR=24
+ARG NODE_MAJOR=26
 ARG PW_VERSION=1.59.1
 
 USER root
