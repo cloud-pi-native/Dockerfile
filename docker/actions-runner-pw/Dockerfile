@@ -4,7 +4,7 @@ FROM ${BASE_IMAGE} AS build
 
 ARG COMPOSE_VERSION=v2.40.0
 ARG NODE_MAJOR=26
-ARG PW_VERSION=1.59.1
+ARG PW_VERSION=1.65.0
 
 USER root
 
@@ -30,9 +30,11 @@ RUN npx get-pnpm
 ENV PATH="/home/node/.local/share/pnpm/bin:$PATH"
 
 # 4) System Deps + Playwright browsers
-RUN apt-get update && \
-    npx --yes playwright@${PW_VERSION} install --with-deps chromium firefox && \
-    chown -R runner:runner /opt/ms-playwright && \
+RUN apt-get update
+
+RUN npx --yes playwright@${PW_VERSION} install --with-deps chromium firefox
+
+RUN chown -R runner:runner /opt/ms-playwright && \
     chmod -R u+rwX /opt/ms-playwright && \
     rm -rf /var/lib/apt/lists/*
 
