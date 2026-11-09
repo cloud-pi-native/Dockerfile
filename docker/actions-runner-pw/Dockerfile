@@ -22,15 +22,6 @@ RUN curl -fsSL "https://deb.nodesource.com/setup_${NODE_MAJOR}.x" | bash - && \
     apt-get install -y --no-install-recommends nodejs && \
     rm -rf /var/lib/apt/lists/*
 
-# 3) PNPM
-# Il ne faut plus installer PNPM depuis Corepack !
-# (cf: https://github.com/pnpm/pnpm/issues/11732#issuecomment-5267508169)
-ENV SHELL="bash"
-RUN npx get-pnpm
-ENV PATH="/root/.local/share/pnpm/bin:$PATH"
-RUN chown -R runner:runner /root/.local/share/pnpm && \
-    chmod -R u+rwX /root/.local/share/pnpm/bin/pnpm
-
 # 4) System Deps + Playwright browsers
 RUN apt-get update
 
@@ -41,3 +32,10 @@ RUN chown -R runner:runner /opt/ms-playwright && \
     rm -rf /var/lib/apt/lists/*
 
 USER runner
+
+# 3) PNPM
+# Il ne faut plus installer PNPM depuis Corepack !
+# (cf: https://github.com/pnpm/pnpm/issues/11732#issuecomment-5267508169)
+ENV SHELL="bash"
+RUN npx get-pnpm
+ENV PATH="/home/runner/.local/share/pnpm/bin:$PATH"
