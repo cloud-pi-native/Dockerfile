@@ -27,7 +27,7 @@ RUN curl -fsSL "https://deb.nodesource.com/setup_${NODE_MAJOR}.x" | bash - && \
 # (cf: https://github.com/pnpm/pnpm/issues/11732#issuecomment-5267508169)
 ENV SHELL="bash"
 RUN npx get-pnpm
-ENV PATH="/home/node/.local/share/pnpm/bin:$PATH"
+ENV PATH="/root/.local/share/pnpm/bin:$PATH"
 
 # 4) System Deps + Playwright browsers
 RUN apt-get update
