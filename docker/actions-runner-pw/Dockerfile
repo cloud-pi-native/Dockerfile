@@ -6,6 +6,9 @@ ARG COMPOSE_VERSION=v2.40.0
 ARG NODE_MAJOR=26
 ARG PW_VERSION=1.65.0
 
+# Version used to install browsers; consumed by workflow compatibility checks.
+ENV RUNNER_PLAYWRIGHT_VERSION=${PW_VERSION}
+
 USER root
 
 # Browsers path
