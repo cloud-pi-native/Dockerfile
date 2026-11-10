@@ -21,8 +21,24 @@ on:
       USE_QEMU:
         required: true
         type: boolean
+      REF:
+        description: Exact Git ref to build (empty uses the calling workflow ref)
+        required: false
+        type: string
+        default: ''
+      FORCE_REBUILD:
+        description: Build and publish even when the target tag already exists
+        required: false
+        type: boolean
+        default: false
+      VERIFY_RUNNER:
+        description: Check runner tools and browsers before publishing tags (native builds only)
+        required: false
+        type: boolean
+        default: false
 
 permissions:
+  contents: read
   packages: write
 
 jobs:
@@ -34,15 +50,17 @@ jobs:
     steps:
     - name: Checks-out repository
       uses: actions/checkout@v4
+      with:
+        ref: ${{ inputs.REF }}
 
     - name: Generate matrix for build
       id: build-matrix
       run: |
         if [ ! -z "${{ inputs.IMAGES }}" ]; then
           JQ_FILTER=$(echo "${{ inputs.IMAGES }}" | jq -R 'split(",")')
-          echo "BUILD_MATRIX=$(jq -c --argjson images "$JQ_FILTER" '[.[] | select(.name | IN($images[]))]' < ./ci/matrix.json)" >> $GITHUB_OUTPUT
+          echo "BUILD_MATRIX=$(jq -c --argjson images "$JQ_FILTER" '[.[] | select(.name | IN($images[]))]' < ./ci/matrix.json)" >> "$GITHUB_OUTPUT"
         else
-          echo "BUILD_MATRIX=$(jq -c '.' < ./ci/matrix.json)" >> $GITHUB_OUTPUT
+          echo "BUILD_MATRIX=$(jq -c '.' < ./ci/matrix.json)" >> "$GITHUB_OUTPUT"
         fi
 
   build:
@@ -68,44 +86,41 @@ jobs:
 
     - name: Get image status
       id: image-status
+      env:
+        FORCE_REBUILD: ${{ inputs.FORCE_REBUILD }}
+        REGISTRY: ${{ inputs.REGISTRY }}
+        NAMESPACE: ${{ inputs.NAMESPACE }}
+        IMAGE_NAME: ${{ matrix.images.name }}
+        IMAGE_TAG: ${{ matrix.images.build.tag }}
+        BUILD_AMD64: ${{ inputs.BUILD_AMD64 }}
+        BUILD_ARM64: ${{ inputs.BUILD_ARM64 }}
+        REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        IMAGE_STATUS=$(curl \
-          --head \
-          --silent \
-          --write-out '%{http_code}' \
-          --output /dev/null \
-          -H "Authorization: Bearer $(echo -n '${{ secrets.GITHUB_TOKEN }}' | base64 -w 0)" \
-          https://${{ inputs.REGISTRY }}/v2/${{ inputs.NAMESPACE }}/${{ matrix.images.name }}/manifests/${{ matrix.images.build.tag }})
-
-        if [ ! "$IMAGE_STATUS" == "404" ]; then
-          if [ "${{ inputs.BUILD_AMD64 }}" == "true" ] && [ "${{ inputs.BUILD_ARM64 }}" == "true" ]; then
-            NEEDS_BUILD=$(curl \
-              --silent \
-              -H "Authorization: Bearer $(echo -n '${{ secrets.GITHUB_TOKEN }}' | base64 -w 0)" \
-              https://${{ inputs.REGISTRY }}/v2/${{ inputs.NAMESPACE }}/${{ matrix.images.name }}/manifests/${{ matrix.images.build.tag }} \
-              | jq '[.manifests[] | select(.platform.architecture == "amd64" or .platform.architecture == "arm64")] | length < 2')
-          elif [ "${{ inputs.BUILD_ARM64 }}" == "true" ]; then
-            NEEDS_BUILD=$(curl \
-              --silent \
-              -H "Authorization: Bearer $(echo -n '${{ secrets.GITHUB_TOKEN }}' | base64 -w 0)" \
-              https://${{ inputs.REGISTRY }}/v2/${{ inputs.NAMESPACE }}/${{ matrix.images.name }}/manifests/${{ matrix.images.build.tag }} \
-              | jq '[.manifests[] | select(.platform.architecture == "arm64")] | length < 1')
-          else
-            NEEDS_BUILD=$(curl \
-              --silent \
-              -H "Authorization: Bearer $(echo -n '${{ secrets.GITHUB_TOKEN }}' | base64 -w 0)" \
-              https://${{ inputs.REGISTRY }}/v2/${{ inputs.NAMESPACE }}/${{ matrix.images.name }}/manifests/${{ matrix.images.build.tag }} \
-              | jq '[.manifests[] | select(.platform.architecture == "amd64")] | length < 1')
-          fi
-        else
-          NEEDS_BUILD="true"
+        if [ "$FORCE_REBUILD" == "true" ]; then
+          echo "NEEDS_BUILD=true" >> "$GITHUB_OUTPUT"
+          exit 0
         fi
-
-        echo "NEEDS_BUILD=$NEEDS_BUILD" >> $GITHUB_OUTPUT
+        IMAGE_STATUS=$(curl --head --silent --write-out '%{http_code}' --output /dev/null \
+          -H "Authorization: Bearer $(printf '%s' "$REGISTRY_TOKEN" | base64 -w 0)" \
+          "https://$REGISTRY/v2/$NAMESPACE/$IMAGE_NAME/manifests/$IMAGE_TAG")
+        if [ "$IMAGE_STATUS" == "404" ]; then
+          NEEDS_BUILD=true
+        else
+          NEEDS_BUILD=$(curl --silent \
+            -H "Authorization: Bearer $(printf '%s' "$REGISTRY_TOKEN" | base64 -w 0)" \
+            "https://$REGISTRY/v2/$NAMESPACE/$IMAGE_NAME/manifests/$IMAGE_TAG" \
+            | jq --argjson amd64 "$BUILD_AMD64" --argjson arm64 "$BUILD_ARM64" \
+              '[.manifests[].platform.architecture] as $archs |
+               ($amd64 and ($archs | index("amd64") | not)) or
+               ($arm64 and ($archs | index("arm64") | not))')
+        fi
+        echo "NEEDS_BUILD=$NEEDS_BUILD" >> "$GITHUB_OUTPUT"
 
     - name: Checks-out repository
       if: ${{ steps.image-status.outputs.NEEDS_BUILD == 'true' }}
       uses: actions/checkout@v4
+      with:
+        ref: ${{ inputs.REF }}
 
     - name: Set up Docker buildx
       if: ${{ steps.image-status.outputs.NEEDS_BUILD == 'true' }}
@@ -123,11 +138,23 @@ jobs:
         context: ${{ matrix.images.build.context }}
         file: ${{ matrix.images.build.dockerfile }}
         target: ${{ matrix.images.build.target }}
-        platforms: ${{ (inputs.BUILD_AMD64 && inputs.BUILD_ARM64 && inputs.USE_QEMU && 'linux/amd64,linux/arm64') || (inputs.BUILD_ARM64 && !inputs.USE_QEMU && 'linux/arm64') || 'linux/amd64' }}
+        pull: true
+        platforms: ${{ (inputs.BUILD_AMD64 && inputs.BUILD_ARM64 && inputs.USE_QEMU && 'linux/amd64,linux/arm64') || ((contains(matrix.runners, '-arm') || (inputs.BUILD_ARM64 && !inputs.BUILD_AMD64)) && 'linux/arm64') || 'linux/amd64' }}
         outputs: type=image,name=${{ inputs.REGISTRY }}/${{ inputs.NAMESPACE }}/${{ matrix.images.name }},push-by-digest=true,name-canonical=true,push=true
         provenance: false
         build-args: |
           BASE_IMAGE=${{ matrix.images.build.base }}
+
+    - name: Verify runner tools and Playwright browsers
+      if: ${{ inputs.VERIFY_RUNNER && steps.image-status.outputs.NEEDS_BUILD == 'true' }}
+      env:
+        IMAGE: ${{ inputs.REGISTRY }}/${{ inputs.NAMESPACE }}/${{ matrix.images.name }}@${{ steps.build.outputs.digest }}
+      run: |
+        if [ "${{ inputs.USE_QEMU }}" == "true" ]; then
+          echo "Runner verification requires native architecture builds" >&2
+          exit 1
+        fi
+        docker run --rm -i --entrypoint bash "$IMAGE" -s < ci/check-actions-runner-pw.sh
 
     - name: Export digest
       if: ${{ steps.image-status.outputs.NEEDS_BUILD == 'true' }}
@@ -140,7 +167,7 @@ jobs:
       if: ${{ steps.image-status.outputs.NEEDS_BUILD == 'true' }}
       uses: actions/upload-artifact@v4
       with:
-        name: digests-${{ matrix.images.name }}-v${{ matrix.images.build.tag }}-${{ (inputs.BUILD_AMD64 && inputs.BUILD_ARM64 && inputs.USE_QEMU && 'multiarch') || (contains(matrix.runners, 'ARM') && 'linux-arm64') || 'linux-amd64' }}
+        name: digests-${{ matrix.images.name }}-v${{ matrix.images.build.tag }}-${{ (inputs.BUILD_AMD64 && inputs.BUILD_ARM64 && inputs.USE_QEMU && 'multiarch') || ((contains(matrix.runners, '-arm') || (inputs.BUILD_ARM64 && !inputs.BUILD_AMD64)) && 'linux-arm64') || 'linux-amd64' }}
         path: /tmp/digests/${{ matrix.images.name }}-v${{ matrix.images.build.tag }}/*
         if-no-files-found: error
         retention-days: 1
@@ -165,40 +192,35 @@ jobs:
 
     - name: Get image status
       id: image-status
+      env:
+        FORCE_REBUILD: ${{ inputs.FORCE_REBUILD }}
+        REGISTRY: ${{ inputs.REGISTRY }}
+        NAMESPACE: ${{ inputs.NAMESPACE }}
+        IMAGE_NAME: ${{ matrix.images.name }}
+        IMAGE_TAG: ${{ matrix.images.build.tag }}
+        BUILD_AMD64: ${{ inputs.BUILD_AMD64 }}
+        BUILD_ARM64: ${{ inputs.BUILD_ARM64 }}
+        REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        IMAGE_STATUS=$(curl \
-          --head \
-          --silent \
-          --write-out '%{http_code}' \
-          --output /dev/null \
-          -H "Authorization: Bearer $(echo -n '${{ secrets.GITHUB_TOKEN }}' | base64 -w 0)" \
-          https://${{ inputs.REGISTRY }}/v2/${{ inputs.NAMESPACE }}/${{ matrix.images.name }}/manifests/${{ matrix.images.build.tag }})
-
-        if [ ! "$IMAGE_STATUS" == "404" ]; then
-          if [ "${{ inputs.BUILD_AMD64 }}" == "true" ] && [ "${{ inputs.BUILD_ARM64 }}" == "true" ]; then
-            NEEDS_BUILD=$(curl \
-              --silent \
-              -H "Authorization: Bearer $(echo -n '${{ secrets.GITHUB_TOKEN }}' | base64 -w 0)" \
-              https://${{ inputs.REGISTRY }}/v2/${{ inputs.NAMESPACE }}/${{ matrix.images.name }}/manifests/${{ matrix.images.build.tag }} \
-              | jq '[.manifests[] | select(.platform.architecture == "amd64" or .platform.architecture == "arm64")] | length < 2')
-          elif [ "${{ inputs.BUILD_ARM64 }}" == "true" ]; then
-            NEEDS_BUILD=$(curl \
-              --silent \
-              -H "Authorization: Bearer $(echo -n '${{ secrets.GITHUB_TOKEN }}' | base64 -w 0)" \
-              https://${{ inputs.REGISTRY }}/v2/${{ inputs.NAMESPACE }}/${{ matrix.images.name }}/manifests/${{ matrix.images.build.tag }} \
-              | jq '[.manifests[] | select(.platform.architecture == "arm64")] | length < 1')
-          else
-            NEEDS_BUILD=$(curl \
-              --silent \
-              -H "Authorization: Bearer $(echo -n '${{ secrets.GITHUB_TOKEN }}' | base64 -w 0)" \
-              https://${{ inputs.REGISTRY }}/v2/${{ inputs.NAMESPACE }}/${{ matrix.images.name }}/manifests/${{ matrix.images.build.tag }} \
-              | jq '[.manifests[] | select(.platform.architecture == "amd64")] | length < 1')
-          fi
-        else
-          NEEDS_BUILD="true"
+        if [ "$FORCE_REBUILD" == "true" ]; then
+          echo "NEEDS_BUILD=true" >> "$GITHUB_OUTPUT"
+          exit 0
         fi
-
-        echo "NEEDS_BUILD=$NEEDS_BUILD" >> $GITHUB_OUTPUT
+        IMAGE_STATUS=$(curl --head --silent --write-out '%{http_code}' --output /dev/null \
+          -H "Authorization: Bearer $(printf '%s' "$REGISTRY_TOKEN" | base64 -w 0)" \
+          "https://$REGISTRY/v2/$NAMESPACE/$IMAGE_NAME/manifests/$IMAGE_TAG")
+        if [ "$IMAGE_STATUS" == "404" ]; then
+          NEEDS_BUILD=true
+        else
+          NEEDS_BUILD=$(curl --silent \
+            -H "Authorization: Bearer $(printf '%s' "$REGISTRY_TOKEN" | base64 -w 0)" \
+            "https://$REGISTRY/v2/$NAMESPACE/$IMAGE_NAME/manifests/$IMAGE_TAG" \
+            | jq --argjson amd64 "$BUILD_AMD64" --argjson arm64 "$BUILD_ARM64" \
+              '[.manifests[].platform.architecture] as $archs |
+               ($amd64 and ($archs | index("amd64") | not)) or
+               ($arm64 and ($archs | index("arm64") | not))')
+        fi
+        echo "NEEDS_BUILD=$NEEDS_BUILD" >> "$GITHUB_OUTPUT"
 
     - name: Get image tags
       if: ${{ steps.image-status.outputs.NEEDS_BUILD == 'true' }}
@@ -212,9 +234,11 @@ jobs:
         echo "MINOR_TAG: $MINOR_TAG"
         echo "PATCH_TAG: $PATCH_TAG"
 
-        echo "MAJOR_TAG=$MAJOR_TAG" >> $GITHUB_OUTPUT
-        echo "MINOR_TAG=$MINOR_TAG" >> $GITHUB_OUTPUT
-        echo "PATCH_TAG=$PATCH_TAG" >> $GITHUB_OUTPUT
+        {
+          echo "MAJOR_TAG=$MAJOR_TAG"
+          echo "MINOR_TAG=$MINOR_TAG"
+          echo "PATCH_TAG=$PATCH_TAG"
+        } >> "$GITHUB_OUTPUT"
 
     - name: Download digests
       if: ${{ steps.image-status.outputs.NEEDS_BUILD == 'true' }}
@@ -244,8 +268,16 @@ jobs:
       if: ${{ steps.image-status.outputs.NEEDS_BUILD == 'true' }}
       working-directory: /tmp/digests/${{ matrix.images.name }}-v${{ matrix.images.build.tag }}
       run: |
-        docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-          $(printf '${{ inputs.REGISTRY }}/${{ inputs.NAMESPACE }}/${{ matrix.images.name }}@sha256:%s ' *)
+        mapfile -t tags < <(jq -r '.tags[]' <<< "$DOCKER_METADATA_OUTPUT_JSON")
+        tag_args=()
+        for tag in "${tags[@]}"; do
+          tag_args+=(-t "$tag")
+        done
+        sources=()
+        for digest in *; do
+          sources+=("${{ inputs.REGISTRY }}/${{ inputs.NAMESPACE }}/${{ matrix.images.name }}@sha256:$digest")
+        done
+        docker buildx imagetools create "${tag_args[@]}" "${sources[@]}"
 
     - name: Inspect image
       if: ${{ steps.image-status.outputs.NEEDS_BUILD == 'true' }}
