@@ -1,0 +1,87 @@
+name: Refresh actions-runner-pw
+
+on:
+  schedule:
+    - cron: '17 5 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: refresh-actions-runner-pw
+  cancel-in-progress: false
+
+jobs:
+  revision:
+    name: Increment runner image revision on main
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    outputs:
+      ref: ${{ steps.revision.outputs.ref }}
+      tag: ${{ steps.revision.outputs.tag }}
+    steps:
+    - name: Check out main
+      uses: actions/checkout@v4
+      with:
+        ref: main
+
+    - name: Increment and commit revision
+      id: revision
+      run: |
+        TAG=$(python3 ci/increment-runner-revision.py)
+        git config user.name 'github-actions[bot]'
+        git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+        git add ci/matrix.json
+        git commit \
+          -m "chore(actions-runner-pw): refresh image to $TAG" \
+          -m 'Generated with AI assistance, reviewed by @stephanetrebel'
+        git push origin HEAD:main
+        echo "ref=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+        echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build and verify runner image
+    needs: revision
+    uses: ./.github/workflows/build.yml
+    with:
+      REGISTRY: ghcr.io
+      NAMESPACE: cloud-pi-native
+      IMAGES: actions-runner-pw
+      REF: ${{ needs.revision.outputs.ref }}
+      BUILD_AMD64: true
+      BUILD_ARM64: true
+      USE_QEMU: false
+      FORCE_REBUILD: true
+      VERIFY_RUNNER: true
+
+  summary:
+    name: Report image availability
+    if: ${{ always() && needs.revision.result != 'skipped' }}
+    needs: [revision, build]
+    runs-on: ubuntu-24.04
+    env:
+      TAG: ${{ needs.revision.outputs.tag }}
+      BUILD_RESULT: ${{ needs.build.result }}
+    steps:
+    - name: Write refresh summary
+      run: |
+        if [ "$BUILD_RESULT" == "success" ]; then
+          {
+            echo '## Image publiée'
+            echo "\`ghcr.io/cloud-pi-native/actions-runner-pw:$TAG\` (amd64 et arm64)."
+            echo 'Mettre à jour manuellement le tag du chart gha-runner-scale-set pour adopter cette image.'
+            echo 'La publication seule ne met pas à jour les runners ARC.'
+          } >> "$GITHUB_STEP_SUMMARY"
+        else
+          {
+            echo '## Échec du rafraîchissement'
+            echo 'Consulter les jobs revision/build : la révision peut avoir été enregistrée sans image publiée.'
+            echo 'Ne pas mettre à jour ARC avant une publication réussie.'
+            echo 'Corriger le problème puis relancer les jobs en échec, ou lancer un nouveau rafraîchissement.'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+        fi
