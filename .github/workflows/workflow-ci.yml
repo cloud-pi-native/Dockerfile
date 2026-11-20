@@ -35,7 +35,7 @@ on:
 
 jobs:
   build-amd64:
-    uses: ./.github/workflows/build.yml
+    uses: ./.github/workflows/job-build.yml
     if: ${{ inputs.BUILD_AMD64 }}
     with:
       REGISTRY: ${{ inputs.REGISTRY }}
@@ -46,7 +46,7 @@ jobs:
       USE_QEMU: ${{ inputs.USE_QEMU == true }}
 
   build-arm64:
-    uses: ./.github/workflows/build.yml
+    uses: ./.github/workflows/job-build.yml
     if: ${{ inputs.BUILD_ARM64 }}
     with:
       REGISTRY: ${{ inputs.REGISTRY }}
